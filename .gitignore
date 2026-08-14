@@ -60,6 +60,7 @@ report_preview/
 *.log
 
 # Fichiers de développement conservés localement
+verify_ui.py
 AGENTS.md
 scripts/
 docs/
