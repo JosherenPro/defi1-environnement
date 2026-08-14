@@ -65,6 +65,7 @@ scripts/
 docs/
 reports/*
 !reports/rapport.pptx
+!reports/rapport.pdf
 src/reporting/
 dashboard/README.md
 dashboard/.streamlit/

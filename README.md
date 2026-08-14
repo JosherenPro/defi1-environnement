@@ -15,6 +15,7 @@ dashboard/analyze.py  Copie du pipeline pour la plateforme
 src/analyze.py        Pipeline principal d'analyse
 data/                 Données sources et audit de récupération
 reports/rapport.pptx  Rapport final
+reports/rapport.pdf   Version PDF du rapport
 ```
 
 Les scripts de vérification et les ressources intermédiaires du rapport restent
