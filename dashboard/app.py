@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dashboard Streamlit — Accès à l'Eau Potable au Togo."""
 import os, json
 import numpy as np

@@ -1,9 +1,0 @@
-pandas
-numpy
-geopandas
-matplotlib
-python-pptx
-plotly
-folium
-streamlit>=1.57
-playwright

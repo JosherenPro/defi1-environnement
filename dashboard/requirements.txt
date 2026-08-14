@@ -1,6 +1,0 @@
-streamlit>=1.57
-pandas
-geopandas
-folium
-plotly
-python-docx

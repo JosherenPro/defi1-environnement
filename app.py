@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Point d'entrée racine pour le déploiement Streamlit Cloud.
 Redirige l'exécution vers dashboard/app.py tout en conservant les chemins d'accès relatifs.

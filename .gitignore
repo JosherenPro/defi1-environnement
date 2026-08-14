@@ -57,3 +57,15 @@ dashboard/_st_shots/
 report_preview/
 .firecrawl/
 *.log
+
+# Fichiers de développement conservés localement
+AGENTS.md
+scripts/
+docs/
+reports/
+src/reporting/
+dashboard/README.md
+dashboard/.streamlit/
+rapport.pptx
+*.zip
+dashboard/assets/regions.csv
