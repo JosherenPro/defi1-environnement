@@ -27,7 +27,7 @@ Pour utiliser uniquement la plateforme :
 
 ```bash
 pip install -r requirements.txt
-streamlit run dashboard/app.py
+streamlit run app.py
 ```
 
 Les indicateurs et les GeoJSON sont déjà préparés dans `dashboard/assets/`.
