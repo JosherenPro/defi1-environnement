@@ -1,0 +1,34 @@
+No.,Nom du champ,Question,Description,Type du champ
+1,region_nom_bdd,,xsd:string,string
+2,prefecture_nom_bdd,,xsd:string,string
+3,commune_nom_bdd,,xsd:string,string
+4,canton_nom_bdd,,xsd:string,string
+5,id,,xsd:int,int
+6,canton_id_bdd,ID du canton,xsd:string,string
+7,forage_chateau_id_collecte,ID du forage,xsd:string,string
+8,forage_chateau_nom,Nom du forage,xsd:string,string
+9,organisme,Organisme en charge,xsd:string,string
+10,organisme_autre,Si autre:,xsd:string,string
+11,pompe_lien,Lien de la pompe,xsd:string,string
+12,chateaux_nombre,Nombre de chateaux liés,xsd:int,int
+13,chateaux_nom_id,Nom & ID des châteaux liés à la pompe,xsd:string,string
+14,emplacement,Emplacement de la pompe,xsd:string,string
+15,pompe_type,Type de pompe,xsd:string,string
+16,pompe_marque,Marque de la pompe,xsd:string,string
+17,pompe_num_serie,Numéro de série de la pompe,xsd:string,string
+18,debit,Nombre de litres d'eau pompés par minute,xsd:number,number
+19,forage_profondeur,Profondeur du forage (m),xsd:number,number
+20,energie,Source d'énergie,xsd:string,string
+21,fonctionnalite,Etat de fonctionnement,xsd:string,string
+22,construction_societe,Société en charge de la construction,xsd:string,string
+23,maintenance_societe,Société en charge de la maintenance,xsd:string,string
+24,operations_societe,Société en charge des opérations/ de l'exploitation,xsd:string,string
+25,responsable,Nom du manager,xsd:string,string
+26,responsable_genre,Genre du responsable,xsd:string,string
+27,responsable_fonction,Fonction du responsable,xsd:string,string
+28,responsable_tel,Téléphone du responsable,xsd:string,string
+29,responsable_mail,Mail du responsable,xsd:string,string
+30,remarques,Remarques,xsd:string,string
+31,date_collecte,Date de la collecte,xsd:string,string
+32,date_mise_a_jour_collecte,Date de la mise à jour,xsd:string,string
+33,geometry,Géométrie,gml:Point,Point
