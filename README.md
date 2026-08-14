@@ -14,10 +14,11 @@ dashboard/assets/     Données préparées et favicon
 dashboard/analyze.py  Copie du pipeline pour la plateforme
 src/analyze.py        Pipeline principal d'analyse
 data/                 Données sources et audit de récupération
+reports/rapport.pptx  Rapport final
 ```
 
-Les scripts de vérification, le rapport et les ressources de présentation
-restent localement disponibles, mais ne sont pas suivis dans le dépôt.
+Les scripts de vérification et les ressources intermédiaires du rapport restent
+localement disponibles, mais ne sont pas suivis dans le dépôt.
 
 ## Installation
 

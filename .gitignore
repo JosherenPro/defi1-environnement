@@ -63,10 +63,12 @@ report_preview/
 AGENTS.md
 scripts/
 docs/
-reports/
+reports/*
+!reports/rapport.pptx
 src/reporting/
 dashboard/README.md
 dashboard/.streamlit/
 rapport.pptx
 *.zip
 dashboard/assets/regions.csv
+!reports/rapport.pptx
