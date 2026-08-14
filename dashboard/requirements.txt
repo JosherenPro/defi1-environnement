@@ -1,0 +1,6 @@
+streamlit>=1.57
+pandas
+numpy
+geopandas
+folium
+plotly
