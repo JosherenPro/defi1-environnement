@@ -667,7 +667,7 @@ with tabs[0]:
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Ouvrages recensés", f"{S['n_points_total']:,}", help="Total des ouvrages TdE (67) et microprojets COSO (218)")
     c2.metric("Ouvrages géolocalisés", f"{len(filtered_points):,}", help="Ouvrages avec coordonnées exploitables")
-    c3.metric("Qualité coordonnées", f"{S['coso_coord_quality_pct']} %", delta=f"-{round(100 - S['coso_coord_quality_pct'], 1)} % nulles", delta_color="inverse")
+    c3.metric("Qualité coordonnées", f"{S['coso_coord_quality_pct']} %")
     c4.metric("Plans d'entretien COSO", f"{S['coso_maint_overall_pct']} %", help="Projets COSO avec maintenance documentée")
     c5.metric("Volume vendu 2022", f"{int(S['total_2022_m3']):,} m³", help="Total facturé TdE en 2022")
 
