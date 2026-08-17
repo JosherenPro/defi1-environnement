@@ -1,17 +1,8 @@
-#!/usr/bin/env python3
-"""
-Dashboard Streamlit — Accès à l'Eau Potable au Togo
-Data Challenge Environnement Défi 01 (Togo AI Lab).
-Style : Togo AI Lab (Palette Forêt Profonde #0B4F4A, Or #F4B400, Turquoise #14877D, Hero Banner avec logo DataLab).
-
-Lance : streamlit run app.py (depuis la racine ou dashboard/)
-"""
+"""Dashboard Streamlit du défi Environnement : accès à l'eau potable au Togo."""
 import os, json, base64
-import numpy as np
 import pandas as pd
 import geopandas as gpd
 import folium
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -19,7 +10,6 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 AST  = os.path.join(BASE, "assets")
 FAVICON = os.path.join(AST, "opendata-favicon.png")
 LOGO_PNG = os.path.join(AST, "logo-datalab.png")
-LOGO_SVG = os.path.join(AST, "logo-datalab.svg")
 
 # Configuration de la page
 st.set_page_config(
@@ -357,6 +347,22 @@ section[data-testid="stSidebar"] [data-baseweb="select"] * {{
     color: {C_INK} !important;
 }}
 
+section[data-testid="stSidebar"] [data-baseweb="input"] > div {{
+    background: #FFFFFF !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+}}
+
+section[data-testid="stSidebar"] [data-baseweb="input"] input {{
+    color: {C_INK} !important;
+}}
+
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
+    color: rgba(255, 255, 255, 0.78) !important;
+    line-height: 1.45 !important;
+}}
+
 section[data-testid="stSidebar"] a {{
     color: {C_GOLD} !important;
     font-weight: 500;
@@ -464,6 +470,7 @@ region_options = R["labels"]
 selected_regions = st.sidebar.multiselect(
     "Régions", region_options, default=region_options,
     help="Sélectionnez une ou plusieurs régions. Les tableaux et la carte sont actualisés.",
+    key="filter_regions",
 )
 if not selected_regions:
     st.sidebar.warning("Sélectionnez au moins une région; toutes les régions sont réaffichées.")
@@ -472,18 +479,33 @@ if not selected_regions:
 source_options = ["TdE", "COSO"]
 selected_sources = st.sidebar.multiselect(
     "Sources des ouvrages", source_options, default=source_options,
+    key="filter_sources",
 )
 
-fri_options = ["Faible", "Moyen", "Élevé"]
+fri_options = ["Faible", "Moyen", "Élevé", "Non classé"]
 selected_fri_classes = st.sidebar.multiselect(
     "Classes FRI", fri_options, default=fri_options,
     help="Le filtre FRI s'applique aux ouvrages joignables à un canton.",
+    key="filter_fri",
+)
+
+search_query = st.sidebar.text_input(
+    "Rechercher un ouvrage ou un canton",
+    placeholder="Ex. Agoè-Nyivé, forage…",
+    help="La recherche s'applique aux noms d'ouvrages, cantons et régions.",
+    key="filter_search",
 )
 
 basemap_option = st.sidebar.radio(
     "Fond cartographique", ["CartoDB Positron · en ligne", "Sans fond · hors ligne"],
     index=0, help="Le mode hors ligne conserve les cantons et ouvrages sans appeler de tuiles externes.",
+    key="filter_basemap",
 )
+
+if st.sidebar.button("Réinitialiser les filtres", icon=":material/refresh:", width="stretch"):
+    for key in ("filter_regions", "filter_sources", "filter_fri", "filter_search", "filter_basemap", "map_mode", "sales_year"):
+        st.session_state.pop(key, None)
+    st.rerun()
 
 # Indice et filtres régionaux
 ridx = [i for i, label in enumerate(R["labels"]) if label in selected_regions]
@@ -515,13 +537,16 @@ def rv(key):
     return [values[i] for i in ridx]
 
 rlabels = rv("labels")
+region_index = {label: i for i, label in enumerate(R["labels"])}
+national_tde_maritime = int(R["n_tde"][region_index["Maritime"]])
+national_coso_savanes = int(R["n_coso"][region_index["Savanes"]])
 
 def filtered_points_frame():
     df = pts_gdf.dropna(subset=["geometry"]).copy()
     if selected_regions:
         df = df[df["region"].isin(selected_regions)]
     if not selected_sources:
-        return df.iloc[0:0]
+        df = df.iloc[0:0]
     else:
         df = df[df["src"].isin(selected_sources)]
     fri = pd.to_numeric(df["FRI_canton"], errors="coerce")
@@ -534,6 +559,10 @@ def filtered_points_frame():
         df = df.iloc[0:0]
     elif set(selected_fri_classes) != set(fri_options):
         df = df[df["FRI_classe"].isin(selected_fri_classes)]
+    if search_query.strip():
+        query = search_query.strip().casefold()
+        searchable = df[["name", "canton", "region"]].fillna("").astype(str).agg(" ".join, axis=1).str.casefold()
+        df = df[searchable.str.contains(query, regex=False)]
     return df
 
 filtered_points = filtered_points_frame()
@@ -542,6 +571,31 @@ selected_points_per_100k = [
     round(count / pop * 100000, 2) if pop else 0
     for count, pop in zip(selected_point_counts, rv("pop_2010"))
 ]
+selected_points_high_fri = int((filtered_points["FRI_classe"] == "Élevé").sum())
+
+def selected_equipment_deficit():
+    densities = selected_points_per_100k
+    maximum = max(densities) if densities else 0
+    return [round(max(0, (1 - density / maximum) * 100), 1) if maximum else 0 for density in densities]
+
+selected_equipment_deficit = selected_equipment_deficit()
+selected_pressure_score = rv("pressure_score")
+selected_new_forages_score = [
+    round(.40 * pressure + .35 * deficit + .25 * exposure, 1)
+    for pressure, deficit, exposure in zip(
+        selected_pressure_score,
+        selected_equipment_deficit,
+        rv("fri_high_population_pct"),
+    )
+]
+
+active_regions_label = ", ".join(selected_regions) if selected_regions else "aucune"
+active_sources_label = ", ".join(selected_sources) if selected_sources else "aucune"
+active_fri_label = ", ".join(selected_fri_classes) if selected_fri_classes else "aucune"
+st.sidebar.caption(
+    f"{len(filtered_points)} ouvrage(s) dans la sélection\n\n"
+    f"Régions : {active_regions_label}\n\nSources : {active_sources_label}\n\nFRI : {active_fri_label}"
+)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown('<p style="font-size:11.5px;color:rgba(255,255,255,0.7);">🔬 <strong>Togo AI Lab</strong> · Défi 1 Environnement</p>', unsafe_allow_html=True)
@@ -587,12 +641,17 @@ def folium_map(mode, points, region_filters=None, fri_filters=None, basemap="Car
         cantons["features"] = [f for f in cantons["features"] if f["properties"].get("fri_class") in fri_filters]
 
     def fri_color(value):
-        value = float(value or 0)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return "#8B9B98"
+        if pd.isna(value):
+            return "#8B9B98"
         if value > 0.13: return C_ORG
         if value > 0.07: return C_GOLD
         return C_TEAL
 
-    if mode in ("Croisement FRI + ouvrages", "Risque d'inondation (FRI cantons)"):
+    if mode in ("Croisement FRI + ouvrages", "Risque d'inondation (FRI cantons)") and cantons.get("features"):
         folium.GeoJson(
             cantons, name="FRI cantons", show=True,
             style_function=lambda feature: {
@@ -630,11 +689,12 @@ def folium_map(mode, points, region_filters=None, fri_filters=None, basemap="Car
         layer_coso.add_to(fmap)
 
     legend_html = f"""
-    <div style="position:fixed;bottom:18px;left:18px;z-index:9999;background:white;border:1px solid #D6E2DF;border-radius:10px;padding:10px 12px;box-shadow:0 3px 12px rgba(11,79,74,.16);font:12px Poppins,Arial,sans-serif;color:#16302C;">
+    <div style="position:fixed;top:18px;left:58px;z-index:9999;background:white;border:1px solid #D6E2DF;border-radius:10px;padding:10px 12px;box-shadow:0 3px 12px rgba(11,79,74,.12);font:12px Poppins,Arial,sans-serif;color:#16302C;">
       <div style="font-weight:700;color:{C_TEAL};margin-bottom:6px;">Légende officielle</div>
       <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:12px;background:{C_TEAL};margin-right:6px;border-radius:2px;"></span>FRI Faible (&le; 0,07)</div>
       <div style="margin-bottom:3px;"><span style="display:inline-block;width:12px;height:12px;background:{C_GOLD};margin-right:6px;border-radius:2px;"></span>FRI Moyen (0,07–0,13)</div>
       <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:12px;background:{C_ORG};margin-right:6px;border-radius:2px;"></span>FRI Élevé (&gt; 0,13)</div>
+      <div style="margin-bottom:4px;"><span style="display:inline-block;width:12px;height:12px;background:#8B9B98;margin-right:6px;border-radius:2px;"></span>FRI non classé</div>
       <div style="border-top:1px solid #E2ECE9;margin-top:6px;padding-top:6px;"><span style="color:{C_ORG};font-size:15px;">●</span> TdE &nbsp; <span style="color:{C_TEAL};font-size:15px;">●</span> COSO</div>
     </div>
     """
@@ -667,7 +727,7 @@ with tabs[0]:
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Ouvrages recensés", f"{S['n_points_total']:,}", help="Total des ouvrages TdE (67) et microprojets COSO (218)")
     c2.metric("Ouvrages géolocalisés", f"{len(filtered_points):,}", help="Ouvrages avec coordonnées exploitables")
-    c3.metric("Qualité coordonnées", f"{S['coso_coord_quality_pct']} %")
+    c3.metric("Coordonnées COSO valides", f"{S['coso_coord_quality_pct']} %", help="Part des microprojets COSO avec des coordonnées exploitables; cet indicateur n'est pas un taux de fonctionnalité.")
     c4.metric("Plans d'entretien COSO", f"{S['coso_maint_overall_pct']} %", help="Projets COSO avec maintenance documentée")
     c5.metric("Volume vendu 2022", f"{int(S['total_2022_m3']):,} m³", help="Total facturé TdE en 2022")
 
@@ -678,7 +738,7 @@ with tabs[0]:
         top_region, top_count = max(zip(rlabels, selected_point_counts), key=lambda item: item[1])
         low_region, low_count = min(zip(rlabels, selected_point_counts), key=lambda item: item[1])
         interpretation(
-            f"La région <strong>{top_region}</strong> regroupe le plus grand effectif d'ouvrages publiés ({top_count}), contre {low_count} en <strong>{low_region}</strong>. Cette disparité reflète le découpage des inventaires actuels (TdE centré sur le littoral et COSO sur le septentrion)."
+            f"La région <strong>{top_region}</strong> regroupe le plus grand effectif d'ouvrages dans la sélection ({top_count}), contre {low_count} en <strong>{low_region}</strong>. Cette disparité reflète à la fois la sélection active et le découpage des inventaires (TdE centré sur le littoral, COSO davantage présent dans le septentrion)."
         )
     with c2:
         section_h("Densité d'équipement par habitant")
@@ -686,24 +746,44 @@ with tabs[0]:
         dense_region, dense_value = max(zip(rlabels, selected_points_per_100k), key=lambda item: item[1])
         sparse_region, sparse_value = min(zip(rlabels, selected_points_per_100k), key=lambda item: item[1])
         interpretation(
-            f"Densité apparente maximale : <strong>{dense_region}</strong> ({dense_value:.2f} points / 100k hab.) ; minimale : <strong>{sparse_region}</strong> ({sparse_value:.2f}). Ce ratio sert d'alerte pour cibler les zones sous-équipées."
+            f"Densité apparente maximale : <strong>{dense_region}</strong> ({dense_value:.2f} ouvrages / 100 000 hab.) ; minimale : <strong>{sparse_region}</strong> ({sparse_value:.2f}). Ce ratio est calculé sur la sélection active et sert d'alerte, sans mesurer le rayon de desserte réel."
         )
 
     section_h("Synthèse du diagnostic territorial")
     st.markdown(
         f"""
         L'analyse intégrée des données ouvertes nationales met en évidence trois constats majeurs pour le pilotage de l'eau au Togo :
-        - **Hétérogénéité spatiale marquée :** L'inventaire TdE couvre quasi-exclusivement la région Maritime ({R['n_tde'][0]}/{S['n_tde']} ouvrages), tandis que le programme COSO se concentre dans les Savanes ({R['n_coso'][2]}/{S['n_coso']} microprojets).
-        - **Enjeu de complétude géographique :** Seuls **{S['n_points_geoloc_ok']} sur {S['n_points_total']} ouvrages** disposent de coordonnées valides ({round(100 - S['coso_coord_quality_pct'], 1)} % des points COSO sont enregistrés à 0,0).
-        - **Vulnérabilité aux inondations (FRI) :** **{S['points_high_FRI']} ouvrages géolocalisés** se situent dans des cantons classés en risque FRI « Élevé » (> 0,13), regroupant plus de **{S.get('population_high_FRI', 0):,} habitants**.
+        - **Hétérogénéité spatiale marquée :** l'inventaire TdE compte **{int(sum(R['n_tde']))} ouvrages**, dont **{national_tde_maritime}** en Maritime ; COSO compte **{int(sum(R['n_coso']))} microprojets**, dont **{national_coso_savanes}** en Savanes. Ces chiffres décrivent la couverture des bases, pas un besoin en eau.
+        - **Enjeu de complétude géographique :** **{S['n_points_geoloc_ok']} sur {S['n_points_total']} ouvrages** disposent d'une localisation exploitable pour le croisement FRI ; **{round(100 - S['coso_coord_quality_pct'], 1)} % des COSO** restent à géocoder ou contrôler.
+        - **Vulnérabilité aux inondations (FRI) :** la sélection active affiche **{selected_points_high_fri} ouvrage(s)** dans des cantons classés « Élevé » ; au niveau national, la base en recense **{S['points_high_FRI']}** pour une population exposée estimée de **{S.get('population_high_FRI', 0):,} habitants**.
         """
     )
-    note("Les données publiques ne comportant pas l'état « fonctionnel/en panne », le taux de panne réel ne peut être calculé directement. Le score COSO constitue un proxy indicatif pour organiser les campagnes d'inspection.")
+    note("Les données publiques ne comportent pas les champs « fonctionnel », « en panne » ou « abandonné ». Le taux de fonctionnalité réel ne peut donc pas être calculé. Le score COSO est un proxy indicatif de contrôle, à confirmer sur le terrain.")
+    with st.expander("Méthode, périmètre et limites", icon=":material/info:"):
+        st.markdown(
+            "**Sources mobilisées :** TdE (ouvrages et ventes d'eau), COSO (microprojets et avancement), INSEED (population par région) et ISRI-TG (FRI par canton).  \n"
+            "**Croisements :** les ouvrages sont rattachés à un canton lorsque les coordonnées sont exploitables ; le FRI est ensuite agrégé par classe.  \n"
+            "**À ne pas confondre :** réception administrative, plan d'entretien et score de contrôle ne prouvent pas le fonctionnement. Une campagne de terrain doit renseigner le statut opérationnel, la date et la cause de panne."
+        )
+    overview_export = pd.DataFrame({
+        "Région": rlabels,
+        "Population légale (2010)": rv("pop_2010"),
+        "Ouvrages dans la sélection": selected_point_counts,
+        "Ouvrages pour 100 000 habitants": selected_points_per_100k,
+        "Déficit relatif d'équipement": selected_equipment_deficit,
+        "Score indicatif de priorité": selected_new_forages_score,
+    })
+    st.download_button("Télécharger les indicateurs de la sélection (CSV)", overview_export.to_csv(index=False).encode("utf-8-sig"), "indicateurs_selection_eau_togo.csv", "text/csv", width="stretch")
 
 # ---------------------------------------------------------------- 2. Cartographie
 with tabs[1]:
     section_h("Système d'Information Géographique — Ouvrages & Risque FRI")
-    mode = st.radio("Sélectionner la vue cartographique :", ["Croisement FRI + ouvrages", "Ouvrages TdE + COSO", "Risque d'inondation (FRI cantons)"], horizontal=True)
+    mode = st.segmented_control(
+        "Vue cartographique",
+        ["Croisement FRI + ouvrages", "Ouvrages TdE + COSO", "Risque d'inondation (FRI cantons)"],
+        default="Croisement FRI + ouvrages",
+        key="map_mode",
+    ) or "Croisement FRI + ouvrages"
     fmap = folium_map(mode, filtered_points, selected_regions, selected_fri_classes, basemap_option)
     render_folium(fmap)
 
@@ -729,31 +809,58 @@ with tabs[2]:
     interpretation("Transparence des données : en l'absence de statut opérationnel de panne/abandon dans les bases sources, un score indicatif de contrôle est modélisé pour orienter les missions de terrain.")
     monitoring_records = data.get("coso_monitoring", [])
     monitoring_all = pd.DataFrame(monitoring_records)
-    control_counts = C.get("control_class_counts", {})
-    if not monitoring_all.empty and "control_class" in monitoring_all:
-        control_counts = monitoring_all["control_class"].value_counts().to_dict()
-    priority_count = int(S.get("coso_control_priority_count") or control_counts.get("Priorité de contrôle", 0))
+    monitoring_df = monitoring_all.copy()
+    if "region" in monitoring_df:
+        monitoring_df = monitoring_df[monitoring_df["region"].isin(selected_regions)]
+    if "COSO" not in selected_sources:
+        monitoring_df = monitoring_df.iloc[0:0]
+    if search_query.strip() and not monitoring_df.empty:
+        query = search_query.strip().casefold()
+        searchable = monitoring_df[["name", "canton", "region"]].fillna("").astype(str).agg(" ".join, axis=1).str.casefold()
+        monitoring_df = monitoring_df[searchable.str.contains(query, regex=False)]
+    if not monitoring_df.empty and "FRI_canton" in monitoring_df:
+        monitoring_fri = pd.to_numeric(monitoring_df["FRI_canton"], errors="coerce")
+        monitoring_df["FRI_classe"] = "Faible"
+        monitoring_df.loc[monitoring_fri.isna(), "FRI_classe"] = "Non classé"
+        monitoring_df.loc[monitoring_fri > 0.07, "FRI_classe"] = "Moyen"
+        monitoring_df.loc[monitoring_fri > 0.13, "FRI_classe"] = "Élevé"
+        if not selected_fri_classes:
+            monitoring_df = monitoring_df.iloc[0:0]
+        elif set(selected_fri_classes) != set(fri_options):
+            monitoring_df = monitoring_df[monitoring_df["FRI_classe"].isin(selected_fri_classes)]
+    control_counts = monitoring_df["control_class"].value_counts().to_dict() if not monitoring_df.empty else {}
+    priority_count = int(control_counts.get("Priorité de contrôle", 0))
+    filtered_maintenance_rate = (
+        round(100 * monitoring_df["maintenance_plan"].fillna(False).astype(bool).mean(), 1)
+        if not monitoring_df.empty else 0
+    )
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Microprojets COSO", f"{C['total']:,}")
-    c2.metric("COSO géolocalisés", f"{S['coso_with_coord']:,}")
-    c3.metric("Plans d'entretien", f"{S['coso_maint_overall_pct']} %")
+    c1.metric("Microprojets COSO", f"{len(monitoring_df):,}")
+    c2.metric("COSO géolocalisés", f"{int(monitoring_df.get('valid_coord', pd.Series(dtype=bool)).fillna(False).sum()):,}")
+    c3.metric("Plans d'entretien", f"{filtered_maintenance_rate} %")
     c4.metric("Bénéficiaires estimés", f"{int(C['beneficiaries_est']):,}")
     c5.metric("Priorité de contrôle", f"{priority_count:,}")
 
     c1, c2 = st.columns(2)
     with c1:
         section_h("Statut d'avancement des microprojets COSO")
-        stt = sorted(C["status"].items(), key=lambda x: -x[1])
+        stt = monitoring_df["project_status"].value_counts().to_dict() if not monitoring_df.empty else {}
+        stt = sorted(stt.items(), key=lambda x: -x[1])
         st.plotly_chart(bar([s[0] for s in stt][::-1], [s[1] for s in stt][::-1], C_TEAL, height=270), width="stretch")
         if stt:
             main_status, main_count = max(stt, key=lambda item: item[1])
             interpretation(f"Statut administratif dominant : « <strong>{main_status}</strong> » ({main_count} projets).")
     with c2:
         section_h("Taux de plans d'entretien documentés")
-        regional_coso_counts = rv("n_coso")
+        regional_coso_counts = [int((monitoring_df["region"] == label).sum()) if not monitoring_df.empty else 0 for label in rlabels]
+        regional_maint_rates = [
+            round(100 * monitoring_df.loc[monitoring_df["region"] == label, "maintenance_plan"].fillna(False).astype(bool).mean(), 1)
+            if regional_coso_counts[i] else 0
+            for i, label in enumerate(rlabels)
+        ]
         covered_regions = [r for r, count in zip(rlabels, regional_coso_counts) if count > 0]
-        covered_rates = [rate for rate, count in zip(rv("maint_rate_coso"), regional_coso_counts) if count > 0]
+        covered_rates = [rate for rate, count in zip(regional_maint_rates, regional_coso_counts) if count > 0]
         if covered_regions:
             st.plotly_chart(bar(covered_regions, covered_rates, C_TURQ, height=270), width="stretch")
             best_r, best_v = max(zip(covered_regions, covered_rates), key=lambda item: item[1])
@@ -766,20 +873,23 @@ with tabs[2]:
     score_counts = [int(control_counts.get(label, 0)) for label in score_order]
     st.plotly_chart(bar(score_order, score_counts, [C_ORG, C_GOLD, C_TEAL, "#8B9B98"], height=250), width="stretch")
 
-    if not monitoring_all.empty:
-        monitoring_df = monitoring_all[monitoring_all["region"].isin(rlabels)].copy()
+    if not monitoring_df.empty:
         display_columns = ["name", "region", "canton", "FRI_canton", "project_status", "maintenance_plan", "control_score", "control_class"]
         col_names = {"name": "Ouvrage", "region": "Région", "canton": "Canton", "FRI_canton": "Indice FRI", "project_status": "Statut", "maintenance_plan": "Plan entretien", "control_score": "Score indicatif", "control_class": "Classe de contrôle"}
         monitoring_view = monitoring_df[display_columns].rename(columns=col_names)
-        st.dataframe(monitoring_view.head(25), hide_index=True, width="stretch")
+        st.caption(f"{len(monitoring_view)} projet(s) dans la sélection. Le score est indicatif et ne remplace pas un contrôle terrain.")
+        st.dataframe(monitoring_view, hide_index=True, height=420, width="stretch")
         st.download_button("Télécharger le registre de contrôle COSO (CSV)", monitoring_view.to_csv(index=False).encode("utf-8-sig"), "registre_controle_coso.csv", "text/csv", width="stretch")
+    else:
+        st.info("Aucun projet COSO ne correspond aux filtres actuels.")
+    note("Le registre ne contient pas de mesure observée de fonctionnalité. Pour rendre le suivi calculable, ajouter : fonctionnel, en panne, abandonné, date du contrôle, cause de panne, contrôleur et coordonnées vérifiées.")
 
 # ---------------------------------------------------------------- 4. Pression démographique
 with tabs[3]:
     section_h("Comparaison Population (INSEED 2010) vs Réseau d'ouvrages")
     fig = go.Figure()
     fig.add_bar(name="Population légale (RGPH 2010)", x=rlabels, y=rv("pop_2010"), marker_color=C_TURQ)
-    fig.add_bar(name="Nombre d'ouvrages", x=rlabels, y=rv("n_points"), marker_color=C_TEAL, yaxis="y2")
+    fig.add_bar(name="Ouvrages dans la sélection", x=rlabels, y=selected_point_counts, marker_color=C_TEAL, yaxis="y2")
     fig.update_layout(barmode="group", height=330, margin=dict(t=25, r=10, b=25, l=55), yaxis2=dict(overlaying="y", side="right", showgrid=False))
     st.plotly_chart(style_figure(fig), width="stretch")
 
@@ -788,15 +898,22 @@ with tabs[3]:
         "Population légale (2010)": rv("pop_2010"),
         "Ouvrages recensés": selected_point_counts,
         "Ratio Habitants / Point d'eau": [round(p / n) if n else None for p, n in zip(rv("pop_2010"), selected_point_counts)],
-        "Indicateur de déficit d'équipement": rv("equipment_deficit_score"),
+        "Indicateur de déficit d'équipement": selected_equipment_deficit,
     })
     st.dataframe(pdf, hide_index=True, width="stretch")
     st.download_button("Télécharger la table démographique (CSV)", pdf.to_csv(index=False).encode("utf-8-sig"), "pression_demographique_togo.csv", "text/csv", width="stretch")
+    ratio_pairs = [(region, ratio) for region, ratio in zip(rlabels, pdf["Ratio Habitants / Point d'eau"]) if ratio is not None and pd.notna(ratio)]
+    if ratio_pairs:
+        pressure_region, pressure_ratio = max(ratio_pairs, key=lambda item: item[1])
+        interpretation(f"La pression relative est la plus forte en <strong>{pressure_region}</strong> ({int(pressure_ratio):,} habitants par ouvrage dans la sélection). Cet indicateur aide à cibler les études, mais doit être complété par la capacité, le débit, la qualité de l'eau et la distance réelle des ménages.")
+    else:
+        interpretation("Aucun ouvrage n'est disponible dans la sélection pour calculer un ratio habitants / point d'eau. Élargissez les filtres pour obtenir une comparaison.")
     note("La densité d'équipement constitue un indicateur de cadrage : elle ne mesure pas le rayon de couverture effectif ni la puissance des forages.")
 
 # ---------------------------------------------------------------- 5. Risque d'inondation
 with tabs[4]:
-    selected_fri_counts = [int((filtered_points["FRI_classe"] == cls).sum()) for cls in F["class"]]
+    risk_classes = F["class"] + ["Non classé"]
+    selected_fri_counts = [int((filtered_points["FRI_classe"] == cls).sum()) for cls in risk_classes]
     c1, c2 = st.columns(2)
     with c1:
         section_h("Répartition des cantons par niveau FRI")
@@ -804,22 +921,25 @@ with tabs[4]:
         st.plotly_chart(style_figure(fig), width="stretch")
     with c2:
         section_h("Ouvrages situés en zone inondable")
-        st.plotly_chart(bar(F["class"], selected_fri_counts, [C_TEAL, C_GOLD, C_ORG]), width="stretch")
+        st.plotly_chart(bar(risk_classes, selected_fri_counts, [C_TEAL, C_GOLD, C_ORG, "#8B9B98"]), width="stretch")
+        risk_region, risk_count = max(zip(risk_classes, selected_fri_counts), key=lambda item: item[1])
+        interpretation(f"Dans la sélection active, la classe FRI <strong>{risk_region}</strong> regroupe le plus d'ouvrages ({risk_count}). Le résultat mesure une exposition spatiale, pas des dommages déjà observés.")
 
     fdf = pd.DataFrame({
-        "Niveau de risque FRI": F["class"],
-        "Nombre de cantons": F["n_cantons"],
+        "Niveau de risque FRI": risk_classes,
+        "Nombre de cantons": F["n_cantons"] + [0],
         "Ouvrages géolocalisés": selected_fri_counts,
-        "Population exposée estimée": [int(x) for x in F["pop"]],
+        "Population exposée estimée": [int(x) for x in F["pop"]] + [0],
     })
+    st.caption("Les cantons et la population exposée constituent le référentiel national ; le nombre d'ouvrages suit les filtres actifs. « Non classé » signale une absence de rattachement FRI.")
     st.dataframe(fdf, hide_index=True, width="stretch")
     st.download_button("Télécharger la synthèse FRI (CSV)", fdf.to_csv(index=False).encode("utf-8-sig"), "exposition_inondation_fri.csv", "text/csv", width="stretch")
-    alert_box(f"{S['points_high_FRI']} ouvrages recensés se trouvent en cantons à risque élevé (FRI > 0,13). Des mesures de surélévation des dalles et d'étanchéité des forages s'imposent.")
+    alert_box(f"{selected_points_high_fri} ouvrage(s) de la sélection se trouvent en cantons à risque élevé (FRI > 0,13). Des mesures de surélévation des dalles, d'étanchéité des têtes de forage et de drainage sont à vérifier sur site.")
 
 # ---------------------------------------------------------------- 6. Consommation
 with tabs[5]:
     years = W["years"]
-    ysel = st.selectbox("Sélectionner l'exercice budgétaire / année :", years, index=len(years)-1)
+    ysel = st.selectbox("Sélectionner l'exercice budgétaire / année :", years, index=len(years)-1, key="sales_year")
     yi = years.index(ysel)
     vals = [r[yi] for r in W["matrix"]]
 
@@ -837,19 +957,20 @@ with tabs[5]:
 # ---------------------------------------------------------------- 7. Recommandations
 with tabs[6]:
     section_h("Recommandations stratégiques d'action publique")
+    filtered_missing_plan = int((~monitoring_df["maintenance_plan"].fillna(False).astype(bool)).sum()) if not monitoring_df.empty else 0
     recommandations = [
-        ("R1", "Audit et maintenance immédiate", f"Auditer en urgence les {sum(rv('maintenance_missing_coso'))} ouvrages COSO sans plan d'entretien documenté dans les régions sélectionnées et programmer une visite trimestrielle.", C_TEAL),
+        ("R1", "Audit et maintenance immédiate", f"Auditer en urgence les {filtered_missing_plan} ouvrages COSO sans plan d'entretien documenté dans la sélection et programmer une visite trimestrielle.", C_TEAL),
         ("R2", "Relevé régulier de fonctionnalité", "Instituer un relevé périodique des statuts fonctionnel / en panne / abandonné avec publication ouverte sur opendata.gouv.tg.", C_TURQ),
         ("R3", "Standardisation et qualité géographique", "Corriger les coordonnées nulles (0,0) et unifier les identifiants territoriaux (codes cantons / Pcode).", C_GOLD),
-        ("R4", "Ciblage des nouveaux forages", "Prioriser les investissements sur les cantons combinant forte population, faible équipement et risque FRI modéré.", C_PURP),
-        ("R5", "Résilience climatique des équipements", f"Mettre en place des têtes de forage surélevées et dalles étanches sur les {S['points_high_FRI']} ouvrages exposés au FRI élevé.", C_ORG),
+        ("R4", "Ciblage des nouveaux forages", "Prioriser les cantons combinant forte population, faible équipement et exposition FRI élevée ou moyenne, après étude hydrogéologique et test de qualité de l'eau.", C_PURP),
+        ("R5", "Résilience climatique des équipements", f"Mettre en place des têtes de forage surélevées, dalles étanches, drainage et accès de secours pour les {selected_points_high_fri} ouvrages FRI élevés de la sélection.", C_ORG),
         ("R6", "Équité territoriale interrégionale", "Équilibrer les financements publics hors de la région Maritime et du corridor COSO après études hydrogéologiques.", C_GOLD),
         ("R7", "Extension des branchements sociaux", "Développer les bornes-fontaines et le réseau de distribution domestique pour les ménages vulnérables.", C_TEAL),
     ]
 
     for code, title_r, desc_r, col_r in recommandations:
         st.markdown(f"""
-        <div style="background:#FFFFFF; border:1px solid #E2ECE9; border-left:5px solid {col_r}; border-radius:10px; padding:12px 18px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+        <div style="background:#FFFFFF; border:1px solid #E2ECE9; border-radius:10px; padding:12px 18px; margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,0.02);">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
             <span style="background:{col_r}; color:white; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px;">{code}</span>
             <strong style="color:{C_TEAL}; font-size:14.5px;">{title_r}</strong>
@@ -858,11 +979,24 @@ with tabs[6]:
         </div>
         """, unsafe_allow_html=True)
 
+    section_h("Feuille de route et indicateurs de suivi")
+    action_plan = pd.DataFrame([
+        ["R1", "0–3 mois", "Audit des ouvrages sans plan", "Nombre d'ouvrages contrôlés et plans créés"],
+        ["R2", "Trimestriel", "Relevé du statut opérationnel", "Part des ouvrages avec date de contrôle"],
+        ["R3", "0–6 mois", "Correction des coordonnées et identifiants", "Taux de coordonnées valides et rattachées"],
+        ["R4", "6–18 mois", "Études puis nouveaux forages", "Cantons étudiés puis ouvrages mis en service"],
+        ["R5", "Avant travaux / saison des pluies", "Protection des ouvrages FRI élevés", "Ouvrages sécurisés et accès maintenus"],
+        ["R6", "Annuel", "Rééquilibrage territorial documenté", "Part des investissements hors zones déjà couvertes"],
+        ["R7", "12–24 mois", "Branchements sociaux et desserte", "Ménages ou points de desserte supplémentaires"],
+    ], columns=["Action", "Horizon", "Décision à prendre", "Indicateur vérifiable"])
+    st.dataframe(action_plan, hide_index=True, width="stretch")
+    st.download_button("Télécharger la feuille de route (CSV)", action_plan.to_csv(index=False).encode("utf-8-sig"), "feuille_de_route_eau_togo.csv", "text/csv", width="stretch")
+
     section_h("Priorisation régionale des nouveaux forages")
-    pr = pd.DataFrame({"Région": rlabels, "Score priorité": rv("new_forages_score"), "Pression démo": rv("pressure_score"), "Déficit équipement": rv("equipment_deficit_score"), "Exposition FRI élevé (%)": rv("fri_high_population_pct")}).sort_values("Score priorité", ascending=False)
+    pr = pd.DataFrame({"Région": rlabels, "Score priorité": selected_new_forages_score, "Pression démo": selected_pressure_score, "Déficit équipement": selected_equipment_deficit, "Exposition FRI élevé (%)": rv("fri_high_population_pct")}).sort_values("Score priorité", ascending=False)
     st.dataframe(pr, hide_index=True, width="stretch")
     st.download_button("Télécharger les priorités régionales (CSV)", pr.to_csv(index=False).encode("utf-8-sig"), "priorites_regionales.csv", "text/csv", width="stretch")
-    note("Score indicatif = 40 % pression démographique + 35 % déficit relatif d'équipement + 25 % part de population en FRI élevé. Il aide à ordonner les études; il ne remplace pas la faisabilité hydrogéologique, le coût, la qualité de l'eau ni la concertation locale.")
+    note("Score indicatif = 40 % pression démographique + 35 % déficit relatif d'équipement + 25 % part de population en FRI élevé. Il aide à ordonner les études; il ne remplace pas la faisabilité hydrogéologique, le coût, la qualité de l'eau ni la concertation locale. Les valeurs suivent les filtres actifs.")
 
     section_h("Cantons à examiner en premier")
     P = data.get("priority_cantons", {})
