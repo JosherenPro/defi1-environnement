@@ -237,7 +237,8 @@ label[data-testid="stMetricLabel"] p {{
     max-width: none !important;
 }}
 
-.stTabs [data-baseweb="tab-list"] {{
+.stTabs [data-baseweb="tab-list"],
+.stTabs [role="tablist"] {{
     display: flex !important;
     gap: 6px;
     background: #FFFFFF;
@@ -251,7 +252,8 @@ label[data-testid="stMetricLabel"] p {{
     justify-content: stretch !important;
 }}
 
-.stTabs [data-baseweb="tab"] {{
+.stTabs [data-baseweb="tab"],
+.stTabs [data-testid="stTab"] {{
     flex: 1 1 0 !important;
     min-width: 0 !important;
     max-width: none !important;
@@ -266,7 +268,8 @@ label[data-testid="stMetricLabel"] p {{
     transition: all 0.2s ease;
 }}
 
-.stTabs [data-baseweb="tab"]:hover {{
+.stTabs [data-baseweb="tab"]:hover,
+.stTabs [data-testid="stTab"]:hover {{
     color: {C_TEAL};
     background: rgba(11, 79, 74, 0.06);
 }}
@@ -430,8 +433,10 @@ section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {{
     .block-container {{ padding: 0.75rem 0.75rem 2rem !important; }}
     .hero-banner {{ flex-direction: column; align-items: flex-start; padding: 1.5rem; }}
     .hero-logo-box {{ align-self: flex-start; }}
-    .stTabs [data-baseweb="tab-list"] {{ overflow-x: auto; flex-wrap: nowrap; }}
-    .stTabs [data-baseweb="tab"] {{ flex: 0 0 auto; white-space: nowrap; }}
+    .stTabs [data-baseweb="tab-list"],
+    .stTabs [role="tablist"] {{ overflow-x: auto; flex-wrap: nowrap; }}
+    .stTabs [data-baseweb="tab"],
+    .stTabs [data-testid="stTab"] {{ flex: 0 0 auto !important; white-space: nowrap; }}
 }}
 </style>
 """, unsafe_allow_html=True)
