@@ -1,7 +1,4 @@
-"""
-Point d'entrée racine pour le déploiement Streamlit Cloud.
-Redirige l'exécution vers dashboard/app.py tout en conservant les chemins d'accès relatifs.
-"""
+"""Point d'entrée Streamlit Cloud vers l'application principale."""
 import os
 import runpy
 import sys
@@ -14,6 +11,5 @@ DASHBOARD_APP = os.path.join(DASHBOARD_DIR, "app.py")
 if DASHBOARD_DIR not in sys.path:
     sys.path.insert(0, DASHBOARD_DIR)
 
-if __name__ == "__main__" or "streamlit" in sys.modules:
-    # Exécute dashboard/app.py dans son propre contexte
-    runpy.run_path(DASHBOARD_APP, run_name="__main__")
+# Exécute toujours la même application que le lancement local.
+runpy.run_path(DASHBOARD_APP, run_name="__main__")
