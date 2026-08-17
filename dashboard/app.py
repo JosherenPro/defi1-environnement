@@ -227,9 +227,18 @@ label[data-testid="stMetricLabel"] p {{
 /* Onglets de navigation - Navigation Pills */
 .stTabs {{
     width: 100% !important;
+    max-width: none !important;
+}}
+
+.stTabs > div,
+.stTabs > div > div,
+.stTabs [role="tablist"] {{
+    width: 100% !important;
+    max-width: none !important;
 }}
 
 .stTabs [data-baseweb="tab-list"] {{
+    display: flex !important;
     gap: 6px;
     background: #FFFFFF;
     padding: 6px;
@@ -237,11 +246,17 @@ label[data-testid="stMetricLabel"] p {{
     box-shadow: 0 2px 8px rgba(11, 79, 74, 0.05);
     border: 1px solid #E2ECE9;
     width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    justify-content: stretch !important;
 }}
 
 .stTabs [data-baseweb="tab"] {{
-    flex: 1 1 0;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
     justify-content: center;
+    text-align: center;
     background-color: transparent;
     border-radius: 8px;
     padding: 10px 14px;
