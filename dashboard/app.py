@@ -250,15 +250,22 @@ label[data-testid="stMetricLabel"] p {{
     min-width: 100% !important;
     max-width: none !important;
     justify-content: stretch !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: thin;
 }}
 
 .stTabs [data-baseweb="tab"],
 .stTabs [data-testid="stTab"] {{
-    flex: 1 1 0 !important;
-    min-width: 0 !important;
+    flex: 1 1 120px !important;
+    min-width: 120px !important;
     max-width: none !important;
     justify-content: center;
     text-align: center;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
     background-color: transparent;
     border-radius: 8px;
     padding: 10px 14px;
@@ -283,6 +290,14 @@ label[data-testid="stMetricLabel"] p {{
 .stTabs [data-baseweb="tab-highlight"],
 .stTabs [data-baseweb="tab-border"] {{
     display: none;
+}}
+
+.stTabs [data-baseweb="tab"] > div,
+.stTabs [data-testid="stTab"] > div {{
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap !important;
 }}
 
 /* Encadrés et avis */
@@ -434,9 +449,9 @@ section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {{
     .hero-banner {{ flex-direction: column; align-items: flex-start; padding: 1.5rem; }}
     .hero-logo-box {{ align-self: flex-start; }}
     .stTabs [data-baseweb="tab-list"],
-    .stTabs [role="tablist"] {{ overflow-x: auto; flex-wrap: nowrap; }}
+    .stTabs [role="tablist"] {{ overflow-x: auto; flex-wrap: nowrap; justify-content: flex-start !important; }}
     .stTabs [data-baseweb="tab"],
-    .stTabs [data-testid="stTab"] {{ flex: 0 0 auto !important; white-space: nowrap; }}
+    .stTabs [data-testid="stTab"] {{ flex: 0 0 142px !important; min-width: 142px !important; white-space: nowrap; }}
 }}
 </style>
 """, unsafe_allow_html=True)
